@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Holter Monitor - Data Pasien & Dashboard</title>
+<style>
+  body {
+    margin:0;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+  }
+  .container {
+    background: white;
+    width: 100%;
+    max-width: 450px;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.1);
+    padding: 25px 30px;
+  }
+  h2 {
+    color: #004aad;
+    margin-bottom: 20px;
+  }
+  input, select, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    margin: 8px 0 16px;
+    border-radius: 6px;
+    border: 1.8px solid #cbd5e1;
+    font-size: 15px;
+    box-sizing: border-box;
+  }
+  textarea {
+    resize: vertical;
+  }
+  button {
+    background: #004aad;
+    border: none;
+    color: white;
+    padding: 14px 0;
+    width: 100%;
+    font-size: 17px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  button:hover {
+    background: #003680;
+  }
+  /* Dashboard */
+  #dashboard {
+    display: none;
+  }
+  .status-container {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .status {
+    padding: 10px 14px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .wifi {
+    background: #2563eb;
+  }
+  .bluetooth {
+    background: #0ea5e9;
+  }
+  .status.disconnected {
+    background: #94a3b8;
+  }
+  .indicator {
+    margin-top: 8px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .indicator.active {
+    color: #16a34a;
+  }
+  .indicator.inactive {
+    color: #dc2626;
+  }
+  /* On/Off Button */
+  #toggleBtn {
+    background: #2563eb;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 12px 0;
+    margin-top: 16px;
+  }
+  /* Chart */
+  #chartContainer {
+    margin-top: 30px;
+  }
+  canvas {
+    width: 100% !important;
+    height: 150px !important;
+  }
+  /* BPM */
+  #bpmDisplay {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2563eb;
+    margin-top: 20px;
+    text-align: center;
+  }
+  /* Notifications */
+  #notif {
+    margin-top: 16px;
+    padding: 12px;
+    background: #e0f2fe;
+    border-left: 5px solid #2563eb;
+    color: #2563eb;
+    font-weight: 600;
+    border-radius: 6px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="container" id="dataPasienForm">
+  <h2>Data Pasien</h2>
+  <form id="formPasien" onsubmit="return simpanPasien(event)">
+    <input type="text" id="nama" placeholder="Nama Lengkap" required />
+    <input type="number" id="umur" placeholder="Umur" min="0" required />
+    <select id="jk" required>
+      <option value="">Jenis Kelamin</option>
+      <option value="Laki-laki">Laki-laki</option>
+      <option value="Perempuan">Perempuan</option>
+    </select>
+    <input type="text" id="tempat" placeholder="Tempat Lahir" required />
+    <input type="date" id="tanggal" required />
+    <textarea id="alamat" placeholder="Alamat Lengkap" rows="3" required></textarea>
+    <input type="tel" id="hp" placeholder="No HP" required />
+    <textarea id="riwayat" placeholder="Riwayat Penyakit" rows="3"></textarea>
+    <button type="submit">Simpan & Lanjutkan</button>
+  </form>
+</div>
+
+<div class="container" id="dashboard">
+  <h2>Dashboard Holter Monitor</h2>
+  <div class="status-container">
+    <div class="status wifi" id="wifiStatus">WiFi: Terputus</div>
+    <div class="status bluetooth" id="bluetoothStatus">Bluetooth: Terputus</div>
+  </div>
+  <div>
+    Status Alat: <span id="deviceStatus" class="indicator inactive">Nonaktif</span>
+  </div>
+  <button id="toggleBtn" onclick="toggleDevice()">Nyalakan Alat</button>
+
+  <div id="bpmDisplay">BPM: --</div>
+
+  <div id="chartContainer">
+    <canvas id="holterChart"></canvas>
+  </div>
+
+  <div id="notif"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  let pasienData = null;
+  let deviceOn = false;
+  let bpm = 60;
+  let chart = null;
+  let chartData = [];
+  let chartLabels = [];
+
+  function simpanPasien(event) {
+    event.preventDefault();
+    pasienData = {
+      nama: nama.value.trim(),
+      umur: umur.value,
+      jk: jk.value,
+      tempat: tempat.value.trim(),
+      tanggal: tanggal.value,
+      alamat: alamat.value.trim(),
+      hp: hp.value.trim(),
+      riwayat: riwayat.value.trim(),
+    };
+    // Simpan ke localStorage (optional)
+    localStorage.setItem('pasienData', JSON.stringify(pasienData));
+
+    alert("Data pasien berhasil disimpan:\n" + JSON.stringify(pasienData, null, 2));
+    document.getElementById('dataPasienForm').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+
+    // Start dashboard simulasi
+    initDashboard();
+    return false;
+  }
+
+  function initDashboard() {
+    // Set awal status koneksi
+    setStatus('wifiStatus', false);
+    setStatus('bluetoothStatus', false);
+
+    // Setup Chart.js Holter Chart
+    const ctx = document.getElementById('holterChart').getContext('2d');
+    chartData = [];
+    chartLabels = [];
+    for(let i = 0; i < 30; i++) {
+      chartData.push(randomInt(50, 90));
+      chartLabels.push('');
+    }
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [{
+          label: 'Holter ECG (Simulasi)',
+          data: chartData,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.2)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        }]
+      },
+      options: {
+        animation: false,
+        scales: {
+          y: {
+            min: 40,
+            max: 100,
+            ticks: {
+              stepSize: 10
+            }
+          },
+          x: {
+            display: false
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            labels: { color: '#004aad' }
+          }
+        }
+      }
+    });
+
+    // Simulasi koneksi WiFi & Bluetooth
+    simulateConnection('wifiStatus', 1000, 0.85);
+    simulateConnection('bluetoothStatus', 1200, 0.75);
+
+    // Simulasi BPM update tiap detik
+    setInterval(updateBPM, 1000);
+  }
+
+  function setStatus(elementId, connected) {
+    const el = document.getElementById(elementId);
+    if (connected) {
+      el.textContent = el.textContent.split(':')[0] + ': Terhubung';
+      el.classList.remove('disconnected');
+    } else {
+      el.textContent = el.textContent.split(':')[0] + ': Terputus';
+      el.classList.add('disconnected');
+    }
+  }
+
+  function simulateConnection(statusId, delay, successRate) {
+    setTimeout(() => {
+      const success = Math.random() < successRate;
+      setStatus(statusId, success);
+    }, delay);
+  }
+
+  function updateBPM() {
+    if (!deviceOn) {
+      document.getElementById('bpmDisplay').textContent = "BPM: --";
+      return;
+    }
+    bpm = bpm + randomInt(-2, 2);
+    if (bpm < 50) bpm = 50;
+    if (bpm > 100) bpm = 100;
+    document.getElementById('bpmDisplay').textContent = "BPM: " + bpm;
+
+    // Update chart
+    chartData.push(bpm);
+    chartData.shift();
+    chart.update();
+  }
+
+  function toggleDevice() {
+    deviceOn = !deviceOn;
+    const btn = document.getElementById('toggleBtn');
+    const statusEl = document.getElementById('deviceStatus');
+    const notif = document.getElementById('notif');
+
+    if (deviceOn) {
+      btn.textContent = 'Matikan Alat';
+      statusEl.textContent = 'Aktif';
+      statusEl.classList.remove('inactive');
+      statusEl.classList.add('active');
+      notif.style.display = 'block';
+      notif.textContent = 'Alat dinyalakan.';
+    } else {
+      btn.textContent = 'Nyalakan Alat';
+      statusEl.textContent = 'Nonaktif';
+      statusEl.classList.remove('active');
+      statusEl.classList.add('inactive');
+      notif.style.display = 'block';
+      notif.textContent = 'Alat dimatikan.';
+      document.getElementById('bpmDisplay').textContent = 'BPM: --';
+    }
+    // Sembunyikan notif setelah 3 detik
+    setTimeout(() => { notif.style.display = 'none'; }, 3000);
+  }
+
+  function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+</script>
+</body>
+</html>
